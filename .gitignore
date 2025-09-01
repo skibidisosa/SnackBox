@@ -1,0 +1,32 @@
+# CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Build outputs
+build/
+out/
+*.o
+*.obj
+*.pdb
+*.lib
+*.dll
+*.exe
+*.ilk
+*.log
+
+# App bundles (macOS)
+*.app/
