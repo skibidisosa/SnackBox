@@ -1,12 +1,12 @@
 // Snack Box — minimal raw TCP HTTP server (C++17, no third-party libs)
-// - Listens on :8080
-// - Prints incoming HTTP request to console
-// - Responds: "Hello Snack Box!"
+// Strict routing with static files from /public (works from CLion build dir)
 
 #include <iostream>
 #include <string>
 #include <csignal>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 #if defined(_WIN32)
   #include <winsock2.h>
@@ -29,6 +29,71 @@ static void ignore_sigpipe() {
 #if !defined(_WIN32)
   std::signal(SIGPIPE, SIG_IGN);
 #endif
+}
+
+static std::string guess_type(const std::string& p){
+  auto ends_with = [&](const char* ext){
+    size_t n = std::strlen(ext);
+    return p.size() >= n && p.compare(p.size()-n, n, ext) == 0;
+  };
+  if (ends_with(".html")) return "text/html; charset=utf-8";
+  if (ends_with(".css"))  return "text/css; charset=utf-8";
+  if (ends_with(".js"))   return "application/javascript";
+  if (ends_with(".png"))  return "image/png";
+  if (ends_with(".jpg") || ends_with(".jpeg")) return "image/jpeg";
+  if (ends_with(".svg"))  return "image/svg+xml";
+  return "application/octet-stream";
+}
+
+static void send_response(SOCKET fd, int code, const std::string& status,
+                          const std::string& ctype, const std::string& body) {
+  std::string resp;
+  resp += "HTTP/1.1 " + std::to_string(code) + " " + status + "\r\n";
+  if (!ctype.empty()) resp += "Content-Type: " + ctype + "\r\n";
+  resp += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+  resp += "Connection: close\r\n\r\n";
+  resp += body;
+  size_t sent = 0;
+  while (sent < resp.size()) {
+#if defined(_WIN32)
+    int n = send(fd, resp.data()+sent, static_cast<int>(resp.size()-sent), 0);
+#else
+    ssize_t n = send(fd, resp.data()+sent, resp.size()-sent, 0);
+#endif
+    if (n <= 0) break;
+    sent += static_cast<size_t>(n);
+  }
+}
+
+static void send_404(SOCKET fd, const std::string& target) {
+  const std::string html =
+    "<!doctype html><meta charset=utf-8>"
+    "<title>404 Not Found</title>"
+    "<style>body{font-family:system-ui;margin:2rem;color:#222}code{background:#f6f6f6;padding:2px 4px;border-radius:4px}</style>"
+    "<h1>404 — Not Found</h1>"
+    "<p>No page for <code>" + target + "</code>.</p>"
+    "<p>Try <a href=\"/\">home</a> or a valid file under <code>/public/</code>.</p>";
+  send_response(fd, 404, "Not Found", "text/html; charset=utf-8", html);
+}
+
+// --- NEW: resolve files from public/ regardless of CLion working dir ---
+static bool load_from_public(const std::string& rel, std::string& out, std::string& fullPathOut) {
+  const char* prefixes[] = {
+    "public/",        // running from project root
+    "../public/",     // running from build dir: project/cmake-build-debug
+    "../../public/"   // running from a deeper build dir layout
+  };
+  for (const char* pref : prefixes) {
+    std::string full = std::string(pref) + rel;
+    std::ifstream ifs(full, std::ios::binary);
+    if (ifs) {
+      std::ostringstream oss; oss << ifs.rdbuf();
+      out = oss.str();
+      fullPathOut = full;
+      return true;
+    }
+  }
+  return false;
 }
 
 int main() {
@@ -55,7 +120,6 @@ int main() {
   }
 #endif
 
-  // Reuse address so restarts don't block bind()
   int opt = 1;
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR,
                  reinterpret_cast<const char*>(&opt), sizeof(opt)) < 0) {
@@ -94,7 +158,7 @@ int main() {
     return 1;
   }
 
-  std::cout << "Snack Box server listening on http://localhost:8080\n";
+  std::cout << "[SnackBox strict] http://localhost:8080\n";
 
   for (;;) {
     sockaddr_in client{};
@@ -113,7 +177,7 @@ int main() {
     }
 #endif
 
-    // Read request until end of headers (\r\n\r\n) or socket would block/close.
+    // Read request until end of headers (\r\n\r\n).
     std::string request;
     char buf[4096];
     for (;;) {
@@ -125,33 +189,53 @@ int main() {
       if (n <= 0) break;
       request.append(buf, buf + n);
       if (request.find("\r\n\r\n") != std::string::npos) break;
-      if (request.size() > 1 << 20) break; // safety: cap at ~1MB
+      if (request.size() > (1<<20)) break;
     }
 
-    // Log request to console
-    std::cout << "----- Incoming Request -----\n"
-              << request << "\n----------------------------\n";
+    // Parse first line: METHOD SP TARGET SP HTTP/1.1
+    std::string method = "GET", target = "/";
+    if (!request.empty()) {
+      auto end = request.find("\r\n");
+      std::string first = request.substr(0, end);
+      std::istringstream iss(first);
+      std::string httpver;
+      iss >> method >> target >> httpver;
+    }
 
-    // Minimal HTTP/1.1 response
-    const std::string body = "Hello Snack Box!";
-    std::string resp;
-    resp += "HTTP/1.1 200 OK\r\n";
-    resp += "Content-Type: text/plain; charset=utf-8\r\n";
-    resp += "Content-Length: " + std::to_string(body.size()) + "\r\n";
-    resp += "Connection: close\r\n";
-    resp += "\r\n";
-    resp += body;
+    // ---- Strict routing ----
+    if (target == "/" || target.empty()) {
+      const std::string body =
+        "<!doctype html><meta charset=utf-8>"
+        "<h1>Hello Snack Box!</h1>"
+        "<ul>"
+        "<li>Static: <a href=\"/public/index.html\">/public/index.html</a></li>"
+        "<li>Anything else returns 404</li>"
+        "</ul>";
+      send_response(client_fd, 200, "OK", "text/html; charset=utf-8", body);
 
-    // Send all bytes
-    size_t sent = 0;
-    while (sent < resp.size()) {
-#if defined(_WIN32)
-      int s = send(client_fd, resp.data() + sent, static_cast<int>(resp.size() - sent), 0);
-#else
-      ssize_t s = send(client_fd, resp.data() + sent, resp.size() - sent, 0);
-#endif
-      if (s <= 0) break;
-      sent += static_cast<size_t>(s);
+    } else if (target == "/public" || target == "/public/") {
+      std::string content, full;
+      if (load_from_public("index.html", content, full)) {
+        send_response(client_fd, 200, "OK", guess_type(full), content);
+      } else {
+        send_404(client_fd, target);
+      }
+
+    } else if (target.rfind("/public/", 0) == 0) {
+      std::string rel = target.substr(8); // strip '/public/'
+      if (rel.find("..") != std::string::npos) {
+        send_response(client_fd, 403, "Forbidden", "text/plain; charset=utf-8", "Forbidden");
+      } else {
+        std::string content, full;
+        if (load_from_public(rel, content, full)) {
+          send_response(client_fd, 200, "OK", guess_type(full), content);
+        } else {
+          send_404(client_fd, target);
+        }
+      }
+
+    } else {
+      send_404(client_fd, target);
     }
 
     closesock(client_fd);
