@@ -1,0 +1,11 @@
+type	name	description	tags	url
+package	SnackBox HTTP Server (C++)	Minimal raw TCP HTTP server with strict routing and static files.	c++;server;http;/public/index.html.
+tool	Route Tester	Curl command templates to test routes quickly.	curl;http;testing;/public/index.html
+doc	SnackBox Routing Spec	Explains how strict routing and 404s work in SnackBox.	routing;spec;/public/index.html
+dataset	movies-mini	Tiny CSV sample dataset for table previews.	csv;sample;/public/index.html
+snippet	C++ JSON escape	Minimal JSON-escape helper for building JSON without libs.	c++;utility;/public/index.html
+package	CLI Scaffolder (C++)	Create new SnackBox modules with a single command.	c++;cli;scaffold;/public/index.html
+doc	Data Index Format	TSV schema for packages/datasets/docs/tools/snippets.	index;schema;/public/index.html
+tool	Dataset Previewer	Read & preview CSV files in the browser.	datasets;preview;/public/index.html
+snippet	Simple Router Macro	Handy macro helpers for declaring routes.	c++;router;/public/index.html
+dataset	config-examples	Example config files to copy for new modules.	config;examples;/public/index.html

@@ -4,13 +4,93 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>SnackBox</title>
 <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-    a { text-decoration: none; }
+    :root { --fg:#111; --muted:#666; --bg:#fff; --card:#f6f7f9; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin: 2rem; color: var(--fg); background: var(--bg); }
+    h1 { margin: 0 0 1rem; }
+    .row { display:flex; gap:.5rem; flex-wrap: wrap; }
+    input, select, button { font: inherit; padding: .6rem .8rem; border: 1px solid #ddd; border-radius: .6rem; }
+    input, select { min-width: 220px; }
+    button { background: #111; color: #fff; cursor: pointer; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .muted { color: var(--muted); font-size:.9rem; }
+    .results { margin-top: 1rem; display: grid; gap: .8rem; }
+    .card { background: var(--card); padding: .9rem 1rem; border-radius: .8rem; }
+    .type { font-size:.75rem; text-transform: uppercase; letter-spacing:.04em; color:#444; }
+    .name { font-weight: 600; margin:.1rem 0; }
+    .desc { color:#333; margin:.25rem 0 .5rem; }
+    .tags { display:flex; gap:.4rem; flex-wrap: wrap; }
+    .tag { font-size:.75rem; padding:.2rem .5rem; background:#e9ecf3; border-radius:.5rem; }
+    .grid { display:grid; gap:.8rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 1.2rem; }
+    .tile { background: var(--card); padding: .9rem 1rem; border-radius: .8rem; }
+    .tile a { text-decoration: none; }
 </style>
-<h1>SnackBox Static</h1>
-<p>If you see this, static file serving works 🎉</p>
-<ul>
-    <li><a href="/">Home route</a></li>
-    <li><a href="/hello/world?x=42">Param + query</a></li>
-    <li><a href="/echo">POST /echo</a> (send a body with curl)</li>
-</ul>
+
+<h1>SnackBox</h1>
+<p class="muted">Your own developer hub — local search of packages, docs, datasets, tools & snippets.</p>
+
+<div class="row">
+    <input id="q" placeholder="Search SnackBox (e.g., http, csv, router)" autofocus />
+    <select id="type">
+        <option value="">All types</option>
+        <option>package</option>
+        <option>dataset</option>
+        <option>doc</option>
+        <option>tool</option>
+        <option>snippet</option>
+    </select>
+    <button id="go">Search</button>
+</div>
+
+<div id="status" class="muted" style="margin-top:.6rem;"></div>
+<div id="results" class="results"></div>
+
+<div class="grid">
+    <div class="tile"><strong>Docs</strong><br><a href="/docs">Open Docs Index →</a></div>
+</div>
+
+<script>
+    const $ = sel => document.querySelector(sel);
+    const enc = s => encodeURIComponent(s ?? '');
+
+    async function run() {
+        const q = $('#q').value.trim();
+        const type = $('#type').value.trim();
+        const url = `/search?q=${enc(q)}&type=${enc(type)}&limit=50`;
+        $('#status').textContent = 'Searching...';
+        $('#results').innerHTML = '';
+        try {
+            const res = await fetch(url, { headers:{ 'Accept':'application/json' } });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            $('#status').textContent = `Found ${data.count} result(s) for "${data.query}"${data.type ? ` in ${data.type}` : ''}.`;
+            render(data.results || []);
+        } catch (e) {
+            $('#status').textContent = `Error: ${e.message}`;
+        }
+    }
+
+    function render(items) {
+        const host = $('#results');
+        host.innerHTML = '';
+        for (const it of items) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+        <div class="type">${it.type}</div>
+        <div class="name">${it.name}</div>
+        <div class="desc">${it.description}</div>
+        <div class="tags">${(it.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}</div>
+        <div><a href="${it.url}">Open</a></div>
+      `;
+            host.appendChild(card);
+        }
+    }
+
+    $('#go').addEventListener('click', run);
+    $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+
+    // initial
+    run();
+</script>
+</html>

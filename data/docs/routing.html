@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SnackBox Routing Spec</title>
+<style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.5 }
+    code, pre { background: #f6f7f9; padding: 2px 6px; border-radius: 6px }
+    pre { padding: .8rem; overflow: auto }
+    a { text-decoration: none }
+</style>
+<h1>SnackBox Routing Spec</h1>
+<p>SnackBox uses <strong>strict routing</strong> with explicit paths and a clear 404 for anything unmatched.</p>
+
+<h2>Rules</h2>
+<ol>
+    <li><code>/</code> → Landing</li>
+    <li><code>/public/*</code> → Static files (no traversal)</li>
+    <li><code>/search</code> → Local index search (TSV-backed)</li>
+    <li><code>/docs</code> → Docs index</li>
+    <li><code>/docs/:slug</code> → Render a specific document from <code>data/docs/:slug.html</code></li>
+</ol>
+
+<h2>404 Behavior</h2>
+<p>Any non-matching path returns a minimal HTML 404 page that includes the rejected target path.</p>
+
+<h2>Why strict?</h2>
+<ul>
+    <li>Predictable behavior</li>
+    <li>Security (no accidental fallthrough)</li>
+    <li>Faster debugging</li>
+</ul>
